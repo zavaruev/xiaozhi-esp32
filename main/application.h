@@ -140,7 +140,9 @@ private:
     bool aborted_ = false;
     bool assets_version_checked_ = false;
     bool play_popup_on_listening_ = false;  // Flag to play popup sound after state changes to listening
+    std::string last_listening_trigger_;
     int clock_ticks_ = 0;
+    uint32_t last_activity_ticks_ = 0;
     TaskHandle_t activation_task_handle_ = nullptr;
 
 

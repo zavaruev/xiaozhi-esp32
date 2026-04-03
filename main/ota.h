@@ -6,6 +6,7 @@
 
 #include <esp_err.h>
 #include "board.h"
+class Http;
 
 class Ota {
 public:

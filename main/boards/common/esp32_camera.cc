@@ -8,6 +8,7 @@
 
 #include "esp32_camera.h"
 #include "board.h"
+#include "at_modem.h"
 #include "display.h"
 #include "lvgl_display.h"
 #include "mcp_server.h"

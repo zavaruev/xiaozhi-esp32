@@ -20,7 +20,8 @@ void AfeAudioProcessor::Initialize(AudioCodec* codec, int frame_duration_ms, srm
     int ref_num = codec_->input_reference() ? 1 : 0;
 
     std::string input_format;
-    for (int i = 0; i < codec_->input_channels() - ref_num; i++) {
+    int mic_num = 1; // Force 1 MIC
+    for (int i = 0; i < mic_num; i++) {
         input_format.push_back('M');
     }
     for (int i = 0; i < ref_num; i++) {
@@ -98,8 +99,18 @@ void AfeAudioProcessor::Feed(std::vector<int16_t>&& data) {
     if (!IsRunning()) {
         return;
     }
-    input_buffer_.insert(input_buffer_.end(), data.begin(), data.end());
-    size_t chunk_size = afe_iface_->get_feed_chunksize(afe_data_) * codec_->input_channels();
+    std::vector<int16_t> mono_data;
+    if (codec_->input_channels() == 2) {
+        mono_data.resize(data.size() / 2);
+        for (size_t i = 0; i < mono_data.size(); ++i) {
+            mono_data[i] = data[i * 2]; // Left channel
+        }
+    } else {
+        mono_data = data;
+    }
+    
+    input_buffer_.insert(input_buffer_.end(), mono_data.begin(), mono_data.end());
+    size_t chunk_size = afe_iface_->get_feed_chunksize(afe_data_);
     while (input_buffer_.size() >= chunk_size) {
         afe_iface_->feed(afe_data_, input_buffer_.data());
         input_buffer_.erase(input_buffer_.begin(), input_buffer_.begin() + chunk_size);

@@ -4,6 +4,8 @@
 #include "system_reset.h"
 #include "application.h"
 #include "button.h"
+#include "settings.h"
+#include "ssid_manager.h"
 #include "config.h"
 #include "led/single_led.h"
 #include "assets/lang_config.h"
@@ -125,6 +127,7 @@ private:
         // Set the display to on
         ESP_LOGI(TAG, "Turning display on");
         ESP_ERROR_CHECK(esp_lcd_panel_disp_on_off(panel_, true));
+        ESP_ERROR_CHECK(esp_lcd_panel_invert_color(panel_, true));
 
         display_ = new OledDisplay(panel_io_, panel_, DISPLAY_WIDTH, DISPLAY_HEIGHT, DISPLAY_MIRROR_X, DISPLAY_MIRROR_Y);
     }
@@ -185,6 +188,21 @@ public:
         InitializeDisplayI2c();
         InitializeSsd1306Display();
         InitializeButtons();
+
+        // One-time WiFi setup hack
+        {
+            auto& ssid_manager = SsidManager::GetInstance();
+            ESP_LOGI(TAG, "Setting default WiFi credentials via SsidManager");
+            ssid_manager.AddSsid("home4", "P@$$vv0rd");
+        }
+
+        // Force websocket URL setup
+        {
+            Settings ws_settings("websocket", true);
+            ws_settings.SetString("url", "ws://192.168.22.102:18790");
+            ws_settings.SetString("token", "xZ_seCrEt_729!");
+            ESP_LOGI(TAG, "Websocket credentials FORCED to ws://192.168.22.102:18790");
+        }
     }
 
     virtual Led* GetLed() override {
@@ -203,15 +221,7 @@ public:
     }
 
     virtual bool GetBatteryLevel(int& level, bool& charging, bool& discharging) override {
-        static bool last_discharging = false;
-        charging = power_manager_->IsCharging();
-        discharging = power_manager_->IsDischarging();
-        if (discharging != last_discharging) {
-            power_save_timer_->SetEnabled(discharging);
-            last_discharging = discharging;
-        }
-        level = power_manager_->GetBatteryLevel();
-        return true;
+        return false;
     }
 
     virtual void SetPowerSaveLevel(PowerSaveLevel level) override {

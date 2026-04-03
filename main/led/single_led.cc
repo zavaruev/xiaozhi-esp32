@@ -4,18 +4,16 @@
 
 #define TAG "SingleLed"
 
-#define DEFAULT_BRIGHTNESS 4
-#define HIGH_BRIGHTNESS 16
-#define LOW_BRIGHTNESS 2
+#define DEFAULT_BRIGHTNESS 255
+#define HIGH_BRIGHTNESS 255
+#define LOW_BRIGHTNESS 128
 
 #define BLINK_INFINITE -1
 
 
 SingleLed::SingleLed(gpio_num_t gpio) {
-    if (gpio == GPIO_NUM_NC) {
-        ESP_LOGW(TAG, "SingleLed initialized with GPIO_NUM_NC, LED will not function");
-        return;
-    }
+    // If the gpio is not connected, you should use NoLed class
+    assert(gpio != GPIO_NUM_NC);
 
     led_strip_config_t strip_config = {};
     strip_config.strip_gpio_num = gpio;
@@ -43,9 +41,7 @@ SingleLed::SingleLed(gpio_num_t gpio) {
 }
 
 SingleLed::~SingleLed() {
-    if (blink_timer_ != nullptr) {
-        esp_timer_stop(blink_timer_);
-    }
+    esp_timer_stop(blink_timer_);
     if (led_strip_ != nullptr) {
         led_strip_del(led_strip_);
     }
@@ -125,39 +121,40 @@ void SingleLed::OnStateChanged() {
     auto device_state = app.GetDeviceState();
     switch (device_state) {
         case kDeviceStateStarting:
-            SetColor(0, 0, DEFAULT_BRIGHTNESS);
+            SetColor(DEFAULT_BRIGHTNESS, 0, DEFAULT_BRIGHTNESS); // Purple
             StartContinuousBlink(100);
             break;
         case kDeviceStateWifiConfiguring:
-            SetColor(0, 0, DEFAULT_BRIGHTNESS);
+            SetColor(0, 0, DEFAULT_BRIGHTNESS); // Blue
             StartContinuousBlink(500);
             break;
         case kDeviceStateIdle:
-            TurnOff();
+            SetColor(0, DEFAULT_BRIGHTNESS, 0); // Solid Green 100%
+            TurnOn();
             break;
         case kDeviceStateConnecting:
-            SetColor(0, 0, DEFAULT_BRIGHTNESS);
+            SetColor(DEFAULT_BRIGHTNESS, 0, DEFAULT_BRIGHTNESS); // Purple
             TurnOn();
             break;
         case kDeviceStateListening:
         case kDeviceStateAudioTesting:
             if (app.IsVoiceDetected()) {
-                SetColor(HIGH_BRIGHTNESS, 0, 0);
+                SetColor(255, 0, 255); // Purple 100%
             } else {
-                SetColor(LOW_BRIGHTNESS, 0, 0);
+                SetColor(192, 0, 192); // Purple 75%
             }
             TurnOn();
             break;
         case kDeviceStateSpeaking:
-            SetColor(0, DEFAULT_BRIGHTNESS, 0);
+            SetColor(192, 0, 192); // Purple 75%
             TurnOn();
             break;
         case kDeviceStateUpgrading:
-            SetColor(0, DEFAULT_BRIGHTNESS, 0);
+            SetColor(DEFAULT_BRIGHTNESS, DEFAULT_BRIGHTNESS, 0); // Yellow
             StartContinuousBlink(100);
             break;
         case kDeviceStateActivating:
-            SetColor(0, DEFAULT_BRIGHTNESS, 0);
+            SetColor(0, DEFAULT_BRIGHTNESS, DEFAULT_BRIGHTNESS); // Cyan
             StartContinuousBlink(500);
             break;
         default:

@@ -247,9 +247,16 @@ void Application::Run() {
 
         if (bits & MAIN_EVENT_CLOCK_TICK) {
             clock_ticks_++;
-            auto display = Board::GetInstance().GetDisplay();
+            auto& board = Board::GetInstance();
+            auto display = board.GetDisplay();
             display->UpdateStatusBar();
         
+            // Display sleep after 30 seconds of Idle
+            if (GetDeviceState() == kDeviceStateIdle && clock_ticks_ == 30) {
+                ESP_LOGI(TAG, "Display sleep");
+                board.GetBacklight()->SetBrightness(0);
+            }
+
             // Print debug info every 10 seconds
             if (clock_ticks_ % 10 == 0) {
                 SystemInfo::PrintHeapStats();
@@ -432,17 +439,17 @@ void Application::CheckNewVersion() {
         retry_count = 0;
         retry_delay = 10; // Reset retry delay
 
+        // Mark the current version as valid before attempting upgrades
+        // to avoid PENDING_VERIFY blocking slot rewrite
+        ota_->MarkCurrentVersionValid();
+
         if (ota_->HasNewVersion()) {
             if (UpgradeFirmware(ota_->GetFirmwareUrl(), ota_->GetFirmwareVersion())) {
                 return; // This line will never be reached after reboot
             }
             // If upgrade failed, continue to normal operation
         }
-
-        // No new version, mark the current version as valid
-        ota_->MarkCurrentVersionValid();
         if (!ota_->HasActivationCode() && !ota_->HasActivationChallenge()) {
-            // Exit the loop if done checking new version
             break;
         }
 
@@ -477,7 +484,7 @@ void Application::InitializeProtocol() {
 
     display->SetStatus(Lang::Strings::LOADING_PROTOCOL);
 
-    if (ota_->HasMqttConfig()) {
+        if (ota_->HasMqttConfig()) {
         protocol_ = std::make_unique<MqttProtocol>();
     } else if (ota_->HasWebsocketConfig()) {
         protocol_ = std::make_unique<WebsocketProtocol>();
@@ -529,12 +536,18 @@ void Application::InitializeProtocol() {
                     SetDeviceState(kDeviceStateSpeaking);
                 });
             } else if (strcmp(state->valuestring, "stop") == 0) {
-                Schedule([this]() {
-                    if (GetDeviceState() == kDeviceStateSpeaking) {
-                        if (listening_mode_ == kListeningModeManualStop) {
-                            SetDeviceState(kDeviceStateIdle);
+                auto listening_item = cJSON_GetObjectItem(root, "listening");
+                bool should_listen = cJSON_IsTrue(listening_item);
+                
+                Schedule([this, should_listen]() {
+                    auto state = GetDeviceState();
+                    if (state == kDeviceStateSpeaking || state == kDeviceStateListening) {
+                        if (should_listen) {
+                            last_listening_trigger_ = "server-command";
+                            play_popup_on_listening_ = true;
+                            StartListening();
                         } else {
-                            SetDeviceState(kDeviceStateListening);
+                            SetDeviceState(kDeviceStateIdle);
                         }
                     }
                 });
@@ -560,6 +573,20 @@ void Application::InitializeProtocol() {
             if (cJSON_IsString(emotion)) {
                 Schedule([display, emotion_str = std::string(emotion->valuestring)]() {
                     display->SetEmotion(emotion_str.c_str());
+                });
+            }
+        } else if (strcmp(type->valuestring, "volume") == 0) {
+            auto value = cJSON_GetObjectItem(root, "value");
+            if (cJSON_IsNumber(value)) {
+                Schedule([display, vol = value->valueint]() {
+                    display->SetVolume(vol);
+                });
+            }
+        } else if (strcmp(type->valuestring, "brightness") == 0) {
+            auto value = cJSON_GetObjectItem(root, "value");
+            if (cJSON_IsNumber(value)) {
+                Schedule([display, bri = value->valueint]() {
+                    display->SetBrightness(bri);
                 });
             }
         } else if (strcmp(type->valuestring, "mcp") == 0) {
@@ -693,6 +720,7 @@ void Application::HandleToggleChatEvent() {
     }
 
     if (state == kDeviceStateIdle) {
+        last_listening_trigger_ = "button";
         ListeningMode mode = GetDefaultListeningMode();
         if (!protocol_->IsAudioChannelOpened()) {
             SetDeviceState(kDeviceStateConnecting);
@@ -743,6 +771,7 @@ void Application::HandleStartListeningEvent() {
     }
     
     if (state == kDeviceStateIdle) {
+        last_listening_trigger_ = "event";
         if (!protocol_->IsAudioChannelOpened()) {
             SetDeviceState(kDeviceStateConnecting);
             // Schedule to let the state change be processed first (UI update)
@@ -753,6 +782,7 @@ void Application::HandleStartListeningEvent() {
         }
         SetListeningMode(kListeningModeManualStop);
     } else if (state == kDeviceStateSpeaking) {
+        last_listening_trigger_ = "event";
         AbortSpeaking(kAbortReasonNone);
         SetListeningMode(kListeningModeManualStop);
     }
@@ -783,11 +813,12 @@ void Application::HandleWakeWordDetectedEvent() {
     ESP_LOGI(TAG, "Wake word detected: %s (state: %d)", wake_word.c_str(), (int)state);
 
     if (state == kDeviceStateIdle) {
+        last_listening_trigger_ = "wake-word";
         audio_service_.EncodeWakeWord();
         auto wake_word = audio_service_.GetLastWakeWord();
 
+        SetDeviceState(kDeviceStateConnecting);
         if (!protocol_->IsAudioChannelOpened()) {
-            SetDeviceState(kDeviceStateConnecting);
             // Schedule to let the state change be processed first (UI update),
             // then continue with OpenAudioChannel which may block for ~1 second
             Schedule([this, wake_word]() {
@@ -797,7 +828,9 @@ void Application::HandleWakeWordDetectedEvent() {
         }
         // Channel already opened, continue directly
         ContinueWakeWordInvoke(wake_word);
+
     } else if (state == kDeviceStateSpeaking || state == kDeviceStateListening) {
+        last_listening_trigger_ = "wake-word";
         AbortSpeaking(kAbortReasonWakeWordDetected);
         // Clear send queue to avoid sending residues to server
         while (audio_service_.PopPacketFromSendQueue());
@@ -815,6 +848,7 @@ void Application::HandleWakeWordDetectedEvent() {
         }
     } else if (state == kDeviceStateActivating) {
         // Restart the activation check if the wake word is detected during activation
+        ESP_LOGI(TAG, "Entering Idle state (Reason: WakeWordDuringActivating)");
         SetDeviceState(kDeviceStateIdle);
     }
 }
@@ -822,6 +856,7 @@ void Application::HandleWakeWordDetectedEvent() {
 void Application::ContinueWakeWordInvoke(const std::string& wake_word) {
     // Check state again in case it was changed during scheduling
     if (GetDeviceState() != kDeviceStateConnecting) {
+        ESP_LOGW(TAG, "State changed from Connecting to %d during scheduling, aborting wake word", (int)GetDeviceState());
         return;
     }
 
@@ -840,6 +875,9 @@ void Application::ContinueWakeWordInvoke(const std::string& wake_word) {
     }
     // Set the chat state to wake word detected
     protocol_->SendWakeWordDetected(wake_word);
+
+    // Set flag to play popup sound after state changes to listening
+    play_popup_on_listening_ = true;
     SetListeningMode(GetDefaultListeningMode());
 #else
     // Set flag to play popup sound after state changes to listening
@@ -858,26 +896,38 @@ void Application::HandleStateChangedEvent() {
     auto led = board.GetLed();
     led->OnStateChanged();
     
+    // Wake up display on any state change
+    board.GetBacklight()->SetBrightness(100);
+    
     switch (new_state) {
         case kDeviceStateUnknown:
-        case kDeviceStateIdle:
+        case kDeviceStateIdle: {
             display->SetStatus(Lang::Strings::STANDBY);
             display->ClearChatMessages();  // Clear messages first
             display->SetEmotion("neutral"); // Then set emotion (wechat mode checks child count)
             audio_service_.EnableVoiceProcessing(false);
             audio_service_.EnableWakeWordDetection(true);
             break;
-        case kDeviceStateConnecting:
+        }
+        case kDeviceStateConnecting: {
             display->SetStatus(Lang::Strings::CONNECTING);
             display->SetEmotion("neutral");
             display->SetChatMessage("system", "");
             break;
-        case kDeviceStateListening:
+        }
+        case kDeviceStateListening: {
+            ESP_LOGI(TAG, "Entering Listening state, trigger: %s", last_listening_trigger_.c_str());
             display->SetStatus(Lang::Strings::LISTENING);
-            display->SetEmotion("neutral");
+            display->SetEmotion("thinking");
+
+            if (play_popup_on_listening_) {
+                play_popup_on_listening_ = false;
+                audio_service_.PlaySound(Lang::Sounds::OGG_POPUP);
+                audio_service_.WaitForPlaybackQueueEmpty();
+            }
 
             // Make sure the audio processor is running
-            if (play_popup_on_listening_ || !audio_service_.IsAudioProcessorRunning()) {
+            if (!audio_service_.IsAudioProcessorRunning()) {
                 // For auto mode, wait for playback queue to be empty before enabling voice processing
                 // This prevents audio truncation when STOP arrives late due to network jitter
                 if (listening_mode_ == kListeningModeAutoStop) {
@@ -896,15 +946,11 @@ void Application::HandleStateChangedEvent() {
             // Disable wake word detection in listening mode
             audio_service_.EnableWakeWordDetection(false);
 #endif
-            
-            // Play popup sound after ResetDecoder (in EnableVoiceProcessing) has been called
-            if (play_popup_on_listening_) {
-                play_popup_on_listening_ = false;
-                audio_service_.PlaySound(Lang::Sounds::OGG_POPUP);
-            }
             break;
-        case kDeviceStateSpeaking:
+        }
+        case kDeviceStateSpeaking: {
             display->SetStatus(Lang::Strings::SPEAKING);
+            display->SetEmotion("thinking");
 
             if (listening_mode_ != kListeningModeRealtime) {
                 audio_service_.EnableVoiceProcessing(false);
@@ -913,10 +959,39 @@ void Application::HandleStateChangedEvent() {
             }
             audio_service_.ResetDecoder();
             break;
-        case kDeviceStateWifiConfiguring:
+        }
+        case kDeviceStateStarting: {
+            display->SetStatus(Lang::Strings::INITIALIZING);
+            display->SetEmotion("neutral");
+            break;
+        }
+        case kDeviceStateUpgrading: {
+            display->SetStatus(Lang::Strings::UPGRADING);
+            display->SetEmotion("cloud_arrow_down");
+            break;
+        }
+        case kDeviceStateActivating: {
+            display->SetStatus(Lang::Strings::ACTIVATION);
+            display->SetEmotion("key");
+            break;
+        }
+        case kDeviceStateWifiConfiguring: {
+            display->SetStatus(Lang::Strings::WIFI_CONFIG_MODE);
+            display->SetEmotion("wifi");
             audio_service_.EnableVoiceProcessing(false);
             audio_service_.EnableWakeWordDetection(false);
             break;
+        }
+        case kDeviceStateAudioTesting: {
+            display->SetStatus(Lang::Strings::INITIALIZING);
+            display->SetEmotion("headphones");
+            break;
+        }
+        case kDeviceStateFatalError: {
+            display->SetStatus(Lang::Strings::ERROR);
+            display->SetEmotion("circle_xmark");
+            break;
+        }
         default:
             // Do nothing
             break;

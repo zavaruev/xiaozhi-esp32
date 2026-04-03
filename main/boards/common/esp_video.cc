@@ -16,6 +16,7 @@
 #include "linux/videodev2.h"
 
 #include "board.h"
+#include "at_modem.h"
 #include "display.h"
 #include "esp_video.h"
 #include "esp_jpeg_common.h"

@@ -18,3 +18,6 @@ main/mmap_generate_emoji.h
 *.bin
 mmap_generate_*.h
 .clangd
+main/secrets.h
+*_log.txt
+diff_wifi.py

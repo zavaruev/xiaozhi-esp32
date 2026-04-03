@@ -1,6 +1,7 @@
 #include "websocket_protocol.h"
 #include "board.h"
 #include "system_info.h"
+#include <network_interface.h>
 #include "application.h"
 #include "settings.h"
 
@@ -81,13 +82,9 @@ void WebsocketProtocol::CloseAudioChannel(bool send_goodbye) {
 }
 
 bool WebsocketProtocol::OpenAudioChannel() {
-    Settings settings("websocket", false);
-    std::string url = settings.GetString("url");
-    std::string token = settings.GetString("token");
-    int version = settings.GetInt("version");
-    if (version != 0) {
-        version_ = version;
-    }
+    std::string url = "ws://192.168.22.102:18790";
+    std::string token = "xZ_seCrEt_729!";
+    version_ = 1; // Default to 1 for Nanobot mcp support
 
     error_occurred_ = false;
 
@@ -147,7 +144,7 @@ bool WebsocketProtocol::OpenAudioChannel() {
             }
         } else {
             // Parse JSON data
-            auto root = cJSON_ParseWithLength(data, len);
+            auto root = cJSON_Parse(data);
             auto type = cJSON_GetObjectItem(root, "type");
             if (cJSON_IsString(type)) {
                 if (strcmp(type->valuestring, "hello") == 0) {
@@ -158,7 +155,7 @@ bool WebsocketProtocol::OpenAudioChannel() {
                     }
                 }
             } else {
-                ESP_LOGE(TAG, "Missing message type, data: %s", std::string(data, len).c_str());
+                ESP_LOGE(TAG, "Missing message type, data: %s", data);
             }
             cJSON_Delete(root);
         }

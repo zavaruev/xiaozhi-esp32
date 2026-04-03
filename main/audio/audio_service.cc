@@ -687,10 +687,8 @@ void AudioService::CheckAndUpdateAudioPowerState() {
         codec_->EnableInput(false);
     }
     if (output_elapsed > AUDIO_POWER_TIMEOUT_MS && codec_->output_enabled()) {
-        // Keep TX clock when duplex RX is active; otherwise RX may stall on some boards.
-        if (!(codec_->duplex() && codec_->input_enabled())) {
-            codec_->EnableOutput(false);
-        }
+        // Freenove 2.8 patch: Force disable output on timeout
+        codec_->EnableOutput(false);
     }
     if (!codec_->input_enabled() && !codec_->output_enabled()) {
         esp_timer_stop(audio_power_timer_);

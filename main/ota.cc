@@ -1,4 +1,5 @@
 #include "ota.h"
+#include "at_modem.h"
 #include "system_info.h"
 #include "settings.h"
 #include "assets/lang_config.h"

@@ -1,12 +1,13 @@
 #ifndef BOARD_H
 #define BOARD_H
 
-#include <http.h>
-#include <web_socket.h>
-#include <mqtt.h>
-#include <udp.h>
+// #include <http.h>
+// #include <web_socket.h>
+// #include <mqtt.h>
+// #include <udp.h>
 #include <string>
 #include <functional>
+class NetworkInterface;
 #include <network_interface.h>
 
 #include "led/led.h"

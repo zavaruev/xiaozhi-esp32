@@ -841,8 +841,7 @@ def main():
     # Read wake word type configuration from sdkconfig
     wake_word_config = read_wake_word_type_from_sdkconfig(args.sdkconfig)
     
-    # Read SR models from sdkconfig
-    wakenet_model_names = read_wakenet_from_sdkconfig(args.sdkconfig)
+    wakenet_model_names = ["wn9_computer_tts"]
     multinet_model_names = read_multinet_from_sdkconfig(args.sdkconfig)
     
     # Apply wake word logic to decide which models to package

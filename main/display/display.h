@@ -3,11 +3,6 @@
 
 #include "emoji_collection.h"
 
-#ifndef CONFIG_USE_EMOTE_MESSAGE_STYLE
-#define HAVE_LVGL 1
-#include <lvgl.h>
-#endif
-
 #include <esp_timer.h>
 #include <esp_log.h>
 #include <esp_pm.h>
@@ -40,6 +35,8 @@ public:
     virtual Theme* GetTheme() { return current_theme_; }
     virtual void UpdateStatusBar(bool update_all = false);
     virtual void SetPowerSaveMode(bool on);
+    virtual void SetVolume(int volume) {}
+    virtual void SetBrightness(int brightness) {}
     virtual void SetupUI() { 
         setup_ui_called_ = true;
     }

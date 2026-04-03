@@ -175,7 +175,9 @@ void OledDisplay::SetupUI_128x64() {
 
     auto screen = lv_screen_active();
     lv_obj_set_style_text_font(screen, text_font, 0);
-    lv_obj_set_style_text_color(screen, lv_color_black(), 0);
+    lv_obj_set_style_text_color(screen, lv_color_white(), 0);
+    lv_obj_set_style_bg_color(screen, lv_color_black(), 0);
+    lv_obj_set_style_bg_opa(screen, LV_OPA_COVER, 0);
 
     /* Container */
     container_ = lv_obj_create(screen);
@@ -258,7 +260,7 @@ void OledDisplay::SetupUI_128x64() {
 
     emotion_label_ = lv_label_create(content_left_);
     lv_obj_set_style_text_font(emotion_label_, large_icon_font, 0);
-    lv_label_set_text(emotion_label_, FONT_AWESOME_MICROCHIP_AI);
+    lv_label_set_text(emotion_label_, FONT_AWESOME_NEUTRAL);
     lv_obj_center(emotion_label_);
     lv_obj_set_style_pad_top(emotion_label_, 8, 0);
 
@@ -325,7 +327,7 @@ void OledDisplay::SetupUI_128x32() {
 
     emotion_label_ = lv_label_create(content_);
     lv_obj_set_style_text_font(emotion_label_, large_icon_font, 0);
-    lv_label_set_text(emotion_label_, FONT_AWESOME_MICROCHIP_AI);
+    lv_label_set_text(emotion_label_, FONT_AWESOME_NEUTRAL);
     lv_obj_center(emotion_label_);
 
     /* Right side */
