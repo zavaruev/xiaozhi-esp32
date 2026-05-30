@@ -39,8 +39,8 @@ void AfeAudioProcessor::Initialize(AudioCodec* codec, int frame_duration_ms, srm
     
     afe_config_t* afe_config = afe_config_init(input_format.c_str(), NULL, AFE_TYPE_VC, AFE_MODE_HIGH_PERF);
     afe_config->aec_mode = AEC_MODE_VOIP_HIGH_PERF;
-    afe_config->vad_mode = VAD_MODE_0;
-    afe_config->vad_min_noise_ms = 100;
+    afe_config->vad_mode = VAD_MODE_3;
+    afe_config->vad_min_noise_ms = 1200;
     if (vad_model_name != nullptr) {
         afe_config->vad_model_name = vad_model_name;
     }
@@ -53,8 +53,13 @@ void AfeAudioProcessor::Initialize(AudioCodec* codec, int frame_duration_ms, srm
         afe_config->ns_init = false;
     }
 
-    afe_config->agc_init = false;
+    afe_config->agc_init = true;
+    afe_config->agc_mode = AFE_AGC_MODE_WEBRTC;
+    afe_config->agc_compression_gain_db = 15;
     afe_config->memory_alloc_mode = AFE_MEMORY_ALLOC_MORE_PSRAM;
+    afe_config->vad_init = true;
+    afe_config->vad_mode = VAD_MODE_3;
+    afe_config->vad_min_noise_ms = 1200;
 
 #ifdef CONFIG_USE_DEVICE_AEC
     afe_config->aec_init = true;
@@ -107,6 +112,7 @@ void AfeAudioProcessor::Feed(std::vector<int16_t>&& data) {
 }
 
 void AfeAudioProcessor::Start() {
+    is_speaking_ = false;
     xEventGroupSetBits(event_group_, PROCESSOR_RUNNING);
 }
 
@@ -118,6 +124,7 @@ void AfeAudioProcessor::Stop() {
         afe_iface_->reset_buffer(afe_data_);
     }
     input_buffer_.clear();
+    is_speaking_ = false;
 }
 
 bool AfeAudioProcessor::IsRunning() {
@@ -156,9 +163,11 @@ void AfeAudioProcessor::AudioProcessorTask() {
         if (vad_state_change_callback_) {
             if (res->vad_state == VAD_SPEECH && !is_speaking_) {
                 is_speaking_ = true;
+                ESP_LOGI(TAG, "VAD_SPEECH detected");
                 vad_state_change_callback_(true);
             } else if (res->vad_state == VAD_SILENCE && is_speaking_) {
                 is_speaking_ = false;
+                ESP_LOGI(TAG, "VAD_SILENCE detected");
                 vad_state_change_callback_(false);
             }
         }
