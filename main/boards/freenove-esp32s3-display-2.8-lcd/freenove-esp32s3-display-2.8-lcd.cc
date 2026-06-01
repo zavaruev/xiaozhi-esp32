@@ -20,11 +20,55 @@
 #include <freertos/task.h>
 #include <esp_timer.h>
 
-#include "led/single_led.h"
+#include "led/circular_strip.h"
 #include "system_reset.h"
 #include "esp_lcd_ili9341.h"
 
 #define TAG "FreenoveESP32S3Display"
+
+class FreenoveLed : public CircularStrip {
+public:
+    FreenoveLed(gpio_num_t gpio) : CircularStrip(gpio, 1) {
+        SetBrightness(80, 10);
+    }
+
+    void OnStateChanged() override {
+        auto& app = Application::GetInstance();
+        switch (app.GetDeviceState()) {
+            case kDeviceStateStarting:
+                Breathe({20,10,0}, {220,100,0}, 30);
+                break;
+            case kDeviceStateWifiConfiguring:
+                Breathe({15,8,0}, {180,80,0}, 30);
+                break;
+            case kDeviceStateConnecting:
+                Breathe({20,10,0}, {220,100,0}, 30);
+                break;
+            case kDeviceStateIdle:
+                FadeOut(30);
+                break;
+            case kDeviceStateListening:
+            case kDeviceStateAudioTesting:
+                Breathe({0,0,10}, {0,60,255}, 30);
+                break;
+            case kDeviceStateSpeaking:
+                Breathe({40,15,0}, {255,180,40}, 30);
+                break;
+            case kDeviceStateUpgrading:
+                Breathe({0,50,30}, {200,100,0}, 30);
+                break;
+            case kDeviceStateActivating:
+                SetAllColor({255,255,255});
+                Blink({255,255,255}, 250);
+                break;
+            case kDeviceStateFatalError:
+                Breathe({40,4,0}, {200,20,0}, 30);
+                break;
+            default:
+                break;
+        }
+    }
+};
 
 class TouchDriver {
 public:
@@ -245,7 +289,7 @@ public:
     }
 
     virtual Led *GetLed() override {
-        static SingleLed led(BUILTIN_LED_GPIO);
+        static FreenoveLed led(BUILTIN_LED_GPIO);
         return &led;
     }
 

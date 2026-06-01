@@ -30,6 +30,10 @@ public:
     void Breathe(StripColor low, StripColor high, int interval_ms);
     void Scroll(StripColor low, StripColor high, int length, int interval_ms);
 
+protected:
+    void StartStripTask(int interval_ms, std::function<void()> cb);
+    void FadeOut(int interval_ms);
+
 private:
     std::mutex mutex_;
     TaskHandle_t blink_task_ = nullptr;
@@ -44,9 +48,12 @@ private:
     uint8_t default_brightness_ = DEFAULT_BRIGHTNESS;
     uint8_t low_brightness_ = LOW_BRIGHTNESS;
 
-    void StartStripTask(int interval_ms, std::function<void()> cb);
     void Rainbow(StripColor low, StripColor high, int interval_ms);
-    void FadeOut(int interval_ms);
+
+    StripColor breathe_current_;
+    bool breathe_increasing_ = true;
+    bool blink_on_ = false;
+    int scroll_offset_ = 0;
 };
 
 #endif // _CIRCULAR_STRIP_H_
