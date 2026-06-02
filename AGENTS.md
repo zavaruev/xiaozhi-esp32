@@ -25,6 +25,13 @@ python scripts/release.py all
 
 `idf.py -DBOARD_NAME=<name> -DBOARD_TYPE=<board> build` for override at build time.
 
+> **WARNING:** `idf.py -DBOARD_NAME=...` only sets the `BOARD_NAME` compile macro.
+> It does **NOT** change `CONFIG_BOARD_TYPE_*` in sdkconfig. If sdkconfig is missing
+> or you ran `rm -rf build`, the build will fall back to the default
+> `BREAD_COMPACT_WIFI` and the wrong board class will be linked. Always use
+> `scripts/release.py` or run `idf.py menuconfig` → "Xiaozhi Assistant > Board Type"
+> to set the correct board. Verify with `grep BOARD_TYPE sdkconfig`.
+
 ## Board System
 
 - Each board lives in `main/boards/<board-dir>/` or `main/boards/<manufacturer>/<board-dir>/`
