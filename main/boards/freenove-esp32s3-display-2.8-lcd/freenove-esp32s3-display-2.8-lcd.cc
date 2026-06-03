@@ -11,6 +11,7 @@
 #include "button.h"
 #include "config.h"
 #include "mcp_server.h"
+#include "adc_battery_monitor.h"
 
 #include <esp_log.h>
 #include <driver/i2c_master.h>
@@ -66,6 +67,11 @@ private:
     Display *display_;
     i2c_master_bus_handle_t codec_i2c_bus_;
     TouchDriver touch_;
+    AdcBatteryMonitor* adc_battery_monitor_;
+
+    void InitializeBatteryMonitor() {
+        adc_battery_monitor_ = new AdcBatteryMonitor(ADC_UNIT_1, ADC_CHANNEL_8, 200000, 200000, GPIO_NUM_NC);
+    }
 
     static void TouchTask(void *arg) {
         auto *self = static_cast<FreenoveESP32S3Display*>(arg);
@@ -229,6 +235,7 @@ public:
     FreenoveESP32S3Display(): boot_button_(BOOT_BUTTON_GPIO)
     {
         InitializeI2c();
+        InitializeBatteryMonitor();
         InitializeSpi();
         InitializeLcdDisplay();
         InitializeTouch();
@@ -257,6 +264,13 @@ public:
         // Use GpioBacklight to test if hardware responds to standard GPIO HIGH/LOW
         static GpioBacklight backlight(DISPLAY_BACKLIGHT_PIN, DISPLAY_BACKLIGHT_OUTPUT_INVERT);
         return &backlight;
+    }
+
+    virtual bool GetBatteryLevel(int &level, bool& charging, bool& discharging) override {
+        charging = adc_battery_monitor_->IsCharging();
+        discharging = adc_battery_monitor_->IsDischarging();
+        level = adc_battery_monitor_->GetBatteryLevel();
+        return true;
     }
 };
 
